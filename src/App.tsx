@@ -8,6 +8,7 @@ import {
   Sparkles,
   ArrowLeft,
   Zap,
+  Timer,
 } from 'lucide-react';
 import type {
   GameLogEntry,
@@ -51,6 +52,21 @@ export function App() {
   const [speed, setSpeed] = useState<number>(1); // 1x, 1.5x, 2x
   const [autoMode, setAutoMode] = useState<boolean>(false);
   const [autoRollDice, setAutoRollDice] = useState<boolean>(false);
+  const [matchDuration, setMatchDuration] = useState<number>(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const matchStartTimeRef = useRef<number>(0);
+
+  // Track live match timer
+  useEffect(() => {
+    if (phase !== 'playing') return;
+    if (matchStartTimeRef.current === 0) {
+      matchStartTimeRef.current = Date.now();
+    }
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - matchStartTimeRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [phase]);
 
   // Token being animated along the board
   const [animatingToken, setAnimatingToken] = useState<{
@@ -106,6 +122,9 @@ export function App() {
   const handleStartGame = (configs: PlayerConfig[]) => {
     animationInProgress.current = false;
     setAnimatingToken(null);
+    matchStartTimeRef.current = Date.now();
+    setElapsedSeconds(0);
+    setMatchDuration(0);
     const initPlayers = createInitialPlayers(configs);
     setPlayers(initPlayers);
     setCurrentPlayerIdx(0);
@@ -141,6 +160,7 @@ export function App() {
     // Check if game is complete (only 1 player remaining without finishing)
     const unfinished = currentList.filter((p) => p.tokensHome < 4);
     if (unfinished.length <= 1 && currentList.length > 1) {
+      setMatchDuration(Math.floor((Date.now() - matchStartTimeRef.current) / 1000));
       setPhase('gameover');
       return;
     }
@@ -184,6 +204,8 @@ export function App() {
         let captureOccurred = false;
         let tokenFinished = false;
 
+        const distance = move.fromStep === -1 ? 1 : Math.max(0, move.toStep - move.fromStep);
+
         const updated = players.map((p, pIdx) => {
           if (pIdx !== currentPlayerIdx) return p;
 
@@ -215,6 +237,11 @@ export function App() {
             ...p,
             tokens: updatedTokens,
             tokensHome,
+            stats: {
+              ...p.stats,
+              totalMoves: (p.stats?.totalMoves ?? 0) + 1,
+              distanceTraveled: (p.stats?.distanceTraveled ?? 0) + distance,
+            },
           };
         });
 
@@ -228,8 +255,20 @@ export function App() {
           const oppColor = updated[oppPlayerIdx].color;
           const baseCoord = getTokenCoord(oppColor, oppTokenId, -1);
 
+          updated[currentPlayerIdx] = {
+            ...updated[currentPlayerIdx],
+            stats: {
+              ...updated[currentPlayerIdx].stats,
+              piecesCaptured: (updated[currentPlayerIdx].stats?.piecesCaptured ?? 0) + 1,
+            },
+          };
+
           updated[oppPlayerIdx] = {
             ...updated[oppPlayerIdx],
+            stats: {
+              ...updated[oppPlayerIdx].stats,
+              piecesLost: (updated[oppPlayerIdx].stats?.piecesLost ?? 0) + 1,
+            },
             tokens: updated[oppPlayerIdx].tokens.map((tok) => {
               if (tok.id === oppTokenId) {
                 return {
@@ -313,6 +352,7 @@ export function App() {
 
           // Trigger victory modal celebration
           setTimeout(() => {
+            setMatchDuration(Math.floor((Date.now() - matchStartTimeRef.current) / 1000));
             setPhase('gameover');
           }, 1100 / speedRef.current);
           return;
@@ -352,6 +392,21 @@ export function App() {
       const newConsecutive = rolled === 6 ? consecutiveSixes + 1 : 0;
       setConsecutiveSixes(newConsecutive);
 
+      // Track roll statistics
+      setPlayers((prev) =>
+        prev.map((p, idx) => {
+          if (idx !== currentPlayerIdx) return p;
+          return {
+            ...p,
+            stats: {
+              ...p.stats,
+              totalRolls: (p.stats?.totalRolls ?? 0) + 1,
+              sixesRolled: rolled === 6 ? (p.stats?.sixesRolled ?? 0) + 1 : (p.stats?.sixesRolled ?? 0),
+            },
+          };
+        })
+      );
+
       addLog(player.color, player.name, `Rolou [${rolled}] no dado.`, 'roll');
 
       // Rule: Three 6s in a row passes turn immediately
@@ -372,6 +427,19 @@ export function App() {
       const moves = getValidMoves(player, rolled, players);
 
       if (moves.length === 0) {
+        setPlayers((prev) =>
+          prev.map((p, idx) => {
+            if (idx !== currentPlayerIdx) return p;
+            return {
+              ...p,
+              stats: {
+                ...p.stats,
+                turnsPassedWithoutMove: (p.stats?.turnsPassedWithoutMove ?? 0) + 1,
+              },
+            };
+          })
+        );
+
         addLog(
           player.color,
           player.name,
@@ -525,6 +593,20 @@ export function App() {
                   />
                   <span className="text-[11px] font-semibold hidden md:inline">Auto Dado</span>
                 </label>
+              </div>
+
+              {/* Live Match Timer */}
+              <div
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700 text-xs text-slate-300 font-mono"
+                title="Tempo de partida decorrido"
+              >
+                <Timer className="w-3.5 h-3.5 text-cyan-400" />
+                <span>
+                  {Math.floor(elapsedSeconds / 60)
+                    .toString()
+                    .padStart(2, '0')}
+                  :{(elapsedSeconds % 60).toString().padStart(2, '0')}
+                </span>
               </div>
 
               {/* Animation Speed Toggle */}
@@ -684,6 +766,7 @@ export function App() {
       <VictoryModal
         isOpen={phase === 'gameover'}
         players={players}
+        durationSeconds={matchDuration}
         onPlayAgain={() => handleStartGame(players)}
         onReturnToMenu={() => setPhase('setup')}
       />

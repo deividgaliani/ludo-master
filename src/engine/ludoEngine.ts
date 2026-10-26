@@ -10,8 +10,21 @@ import type {
   Player,
   PlayerColor,
   PlayerConfig,
+  PlayerStats,
   Token,
 } from '../types/ludo';
+
+export function createInitialStats(): PlayerStats {
+  return {
+    piecesCaptured: 0,
+    piecesLost: 0,
+    totalMoves: 0,
+    totalRolls: 0,
+    sixesRolled: 0,
+    distanceTraveled: 0,
+    turnsPassedWithoutMove: 0,
+  };
+}
 
 export function createInitialPlayers(configs: PlayerConfig[]): Player[] {
   return configs.map((cfg) => {
@@ -35,6 +48,7 @@ export function createInitialPlayers(configs: PlayerConfig[]): Player[] {
       difficulty: cfg.difficulty || 'smart',
       tokens,
       tokensHome: 0,
+      stats: createInitialStats(),
     };
   });
 }

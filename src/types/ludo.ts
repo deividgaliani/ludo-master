@@ -25,6 +25,16 @@ export interface Token {
   col: number;
 }
 
+export interface PlayerStats {
+  piecesCaptured: number;
+  piecesLost: number;
+  totalMoves: number;
+  totalRolls: number;
+  sixesRolled: number;
+  distanceTraveled: number;
+  turnsPassedWithoutMove: number;
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -34,6 +44,7 @@ export interface Player {
   tokens: Token[];
   tokensHome: number;
   rank?: number; // 1st, 2nd, 3rd, 4th
+  stats: PlayerStats;
 }
 
 export interface MoveOption {

@@ -3,6 +3,7 @@ import type { BoardCoord } from '../constants/boardPath';
 import {
   HOME_STRETCHES,
   START_INDICES,
+  STAR_INDICES,
   TRACK_COORDINATES,
 } from '../constants/boardPath';
 import { COLOR_THEMES } from '../constants/colors';
@@ -61,22 +62,43 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
     };
   };
 
-  const renderStarIcon = (cx: number, cy: number, color: string = '#64748b') => {
+  const renderStarIcon = (cx: number, cy: number, color: string = '#f59e0b') => {
     return (
-      <path
-        d={`M ${cx} ${cy - 12} 
-            L ${cx + 3.5} ${cy - 4} 
-            L ${cx + 12} ${cy - 3} 
-            L ${cx + 6} ${cy + 3} 
-            L ${cx + 8} ${cy + 11} 
-            L ${cx} ${cy + 7} 
-            L ${cx - 8} ${cy + 11} 
-            L ${cx - 6} ${cy + 3} 
-            L ${cx - 12} ${cy - 3} 
-            L ${cx - 3.5} ${cy - 4} Z`}
-        fill={color}
-        opacity="0.85"
-      />
+      <g>
+        {/* Soft shadow under star */}
+        <path
+          d={`M ${cx} ${cy - 12} 
+              L ${cx + 3.5} ${cy - 4} 
+              L ${cx + 12} ${cy - 3} 
+              L ${cx + 6} ${cy + 3} 
+              L ${cx + 8} ${cy + 11} 
+              L ${cx} ${cy + 7} 
+              L ${cx - 8} ${cy + 11} 
+              L ${cx - 6} ${cy + 3} 
+              L ${cx - 12} ${cy - 3} 
+              L ${cx - 3.5} ${cy - 4} Z`}
+          fill="#000000"
+          opacity="0.12"
+          transform="translate(0, 1)"
+        />
+        {/* Main Golden Star */}
+        <path
+          d={`M ${cx} ${cy - 12} 
+              L ${cx + 3.5} ${cy - 4} 
+              L ${cx + 12} ${cy - 3} 
+              L ${cx + 6} ${cy + 3} 
+              L ${cx + 8} ${cy + 11} 
+              L ${cx} ${cy + 7} 
+              L ${cx - 8} ${cy + 11} 
+              L ${cx - 6} ${cy + 3} 
+              L ${cx - 12} ${cy - 3} 
+              L ${cx - 3.5} ${cy - 4} Z`}
+          fill={color}
+          stroke="#b45309"
+          strokeWidth="1.2"
+          opacity="0.95"
+        />
+      </g>
     );
   };
 
@@ -133,6 +155,12 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
           <linearGradient id="blue-base-grad" x1="0" y1="1" x2="1" y2="0">
             <stop offset="0%" stopColor="#3b82f6" />
             <stop offset="100%" stopColor="#1d4ed8" />
+          </linearGradient>
+          {/* Star safe cell border gradient */}
+          <linearGradient id="star-cell-border-grad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#f59e0b" />
+            <stop offset="50%" stopColor="#fbbf24" />
+            <stop offset="100%" stopColor="#d97706" />
           </linearGradient>
         </defs>
 
@@ -257,6 +285,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
           if (isGreenStart) cellFill = '#dcfce7';
           if (isYellowStart) cellFill = '#fef9c3';
           if (isBlueStart) cellFill = '#dbeafe';
+          if (isStar) cellFill = '#fef3c7';
 
           return (
             <g key={`track-${idx}`}>
@@ -273,7 +302,111 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
               {isGreenStart && renderArrowIcon(cx, cy, 'down', '#22c55e')}
               {isYellowStart && renderArrowIcon(cx, cy, 'left', '#eab308')}
               {isBlueStart && renderArrowIcon(cx, cy, 'up', '#3b82f6')}
-              {isStar && renderStarIcon(cx, cy, '#64748b')}
+              {isStar && renderStarIcon(cx, cy, '#f59e0b')}
+            </g>
+          );
+        })}
+
+        {/* 6.1 Star (Protected) Squares Colored Outline & Corner Badges (high visibility when token is present) */}
+        {STAR_INDICES.map((starIdx) => {
+          const coord = TRACK_COORDINATES[starIdx];
+          const x = coord.col * CELL_SIZE;
+          const y = coord.row * CELL_SIZE;
+          const inset = 1.5;
+          const w = CELL_SIZE - inset * 2;
+          const h = CELL_SIZE - inset * 2;
+          const cornerLen = 8;
+
+          return (
+            <g key={`star-outline-${starIdx}`} pointerEvents="none">
+              {/* Outer soft golden halo */}
+              <rect
+                x={x + 1}
+                y={y + 1}
+                width={CELL_SIZE - 2}
+                height={CELL_SIZE - 2}
+                rx="6"
+                fill="none"
+                stroke="#fbbf24"
+                strokeWidth="5"
+                opacity="0.35"
+              />
+
+              {/* Bold vibrant golden outline */}
+              <rect
+                x={x + inset}
+                y={y + inset}
+                width={w}
+                height={h}
+                rx="5"
+                fill="none"
+                stroke="url(#star-cell-border-grad)"
+                strokeWidth="3.5"
+              />
+
+              {/* Inner subtle dashed ring for distinct safe zone look */}
+              <rect
+                x={x + 5}
+                y={y + 5}
+                width={CELL_SIZE - 10}
+                height={CELL_SIZE - 10}
+                rx="3.5"
+                fill="none"
+                stroke="#d97706"
+                strokeWidth="1"
+                strokeDasharray="3 2"
+                opacity="0.8"
+              />
+
+              {/* Four protective corner brackets (always visible around any pawn) */}
+              <path
+                d={`M ${x + 3} ${y + 3 + cornerLen} L ${x + 3} ${y + 3} L ${x + 3 + cornerLen} ${y + 3}`}
+                stroke="#b45309"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+              <path
+                d={`M ${x + CELL_SIZE - 3 - cornerLen} ${y + 3} L ${x + CELL_SIZE - 3} ${y + 3} L ${x + CELL_SIZE - 3} ${y + 3 + cornerLen}`}
+                stroke="#b45309"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+              <path
+                d={`M ${x + CELL_SIZE - 3} ${y + CELL_SIZE - 3 - cornerLen} L ${x + CELL_SIZE - 3} ${y + CELL_SIZE - 3} L ${x + CELL_SIZE - 3 - cornerLen} ${y + CELL_SIZE - 3}`}
+                stroke="#b45309"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+              <path
+                d={`M ${x + 3 + cornerLen} ${y + CELL_SIZE - 3} L ${x + 3} ${y + CELL_SIZE - 3} L ${x + 3} ${y + CELL_SIZE - 3 - cornerLen}`}
+                stroke="#b45309"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+
+              {/* Corner accent dots */}
+              {[
+                [x + 8, y + 8],
+                [x + CELL_SIZE - 8, y + 8],
+                [x + CELL_SIZE - 8, y + CELL_SIZE - 8],
+                [x + 8, y + CELL_SIZE - 8],
+              ].map(([px, py], cIdx) => (
+                <circle
+                  key={`corner-dot-${cIdx}`}
+                  cx={px}
+                  cy={py}
+                  r="1.75"
+                  fill="#b45309"
+                />
+              ))}
             </g>
           );
         })}

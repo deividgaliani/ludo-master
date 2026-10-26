@@ -82,7 +82,6 @@ describe('Ludo Engine & Rules', () => {
   });
 
   it('enters the home stretch directly from step 50 without passing into step 51 on the outer track', () => {
-    const players = createInitialPlayers(sampleConfigs);
     // Red starts at 0 (row 6, col 1)
     // Step 50 is (row 7, col 0)
     const coord50 = getTokenCoord('red', 0, 50);
@@ -368,5 +367,19 @@ describe('Auto Mode Decision Engine (getNoBrainerMove)', () => {
     expect(autoMove).not.toBeNull();
     expect(autoMove?.fromStep).toBe(0);
     expect(autoMove?.toStep).toBe(1);
+  });
+
+  it('initializes each player with zeroed stats for metrics tracking', () => {
+    const players = createInitialPlayers(configs);
+    for (const player of players) {
+      expect(player.stats).toBeDefined();
+      expect(player.stats.piecesCaptured).toBe(0);
+      expect(player.stats.piecesLost).toBe(0);
+      expect(player.stats.totalMoves).toBe(0);
+      expect(player.stats.totalRolls).toBe(0);
+      expect(player.stats.sixesRolled).toBe(0);
+      expect(player.stats.distanceTraveled).toBe(0);
+      expect(player.stats.turnsPassedWithoutMove).toBe(0);
+    }
   });
 });

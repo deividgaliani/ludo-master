@@ -75,6 +75,10 @@ export const START_INDICES: Record<PlayerColor, number> = {
   blue: 39,
 };
 
+// Star squares (safe spots marked with stars)
+export const STAR_INDICES = [8, 21, 34, 47] as const;
+export const STAR_SQUARE_INDICES = new Set(STAR_INDICES);
+
 // Safe squares globally (starts + stars)
 export const SAFE_SQUARE_INDICES = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
 

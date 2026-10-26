@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, User, Trophy, Home } from 'lucide-react';
+import { Bot, User, Trophy, Home, Swords, ShieldAlert, Footprints } from 'lucide-react';
 import { COLOR_THEMES } from '../constants/colors';
 import type { Player } from '../types/ludo';
 
@@ -113,6 +113,31 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
             <Home className="w-3 h-3" />
             {inHomeCount}/4
           </div>
+        </div>
+      </div>
+
+      {/* Live Match Metrics */}
+      <div className="mt-2.5 pt-2 border-t border-slate-700/40 grid grid-cols-3 gap-1.5 text-center text-[11px]">
+        <div
+          className="flex items-center justify-center gap-1 bg-rose-950/40 text-rose-300 rounded-lg py-1 px-1 border border-rose-900/40 font-semibold"
+          title="Peças capturadas por este jogador"
+        >
+          <Swords className="w-3 h-3 text-rose-400 shrink-0" />
+          <span className="truncate">{player.stats?.piecesCaptured ?? 0}</span>
+        </div>
+        <div
+          className="flex items-center justify-center gap-1 bg-amber-950/40 text-amber-300 rounded-lg py-1 px-1 border border-amber-900/40 font-semibold"
+          title="Peças perdidas (capturadas por oponentes)"
+        >
+          <ShieldAlert className="w-3 h-3 text-amber-400 shrink-0" />
+          <span className="truncate">{player.stats?.piecesLost ?? 0}</span>
+        </div>
+        <div
+          className="flex items-center justify-center gap-1 bg-cyan-950/40 text-cyan-300 rounded-lg py-1 px-1 border border-cyan-900/40 font-semibold"
+          title="Total de movimentos realizados"
+        >
+          <Footprints className="w-3 h-3 text-cyan-400 shrink-0" />
+          <span className="truncate">{player.stats?.totalMoves ?? 0}</span>
         </div>
       </div>
     </div>
