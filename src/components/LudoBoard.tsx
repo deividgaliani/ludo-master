@@ -11,8 +11,9 @@ import { TokenPiece } from './TokenPiece';
 
 interface LudoBoardProps {
   players: Player[];
+  currentPlayerColor?: PlayerColor;
   validMoves: MoveOption[];
-  onTokenClick: (tokenId: number) => void;
+  onTokenClick: (tokenId: number, tokenColor: PlayerColor) => void;
   animatingToken?: {
     color: PlayerColor;
     tokenId: number;
@@ -24,6 +25,7 @@ const CELL_SIZE = 50; // 15 x 50 = 750px board
 
 export const LudoBoard: React.FC<LudoBoardProps> = ({
   players,
+  currentPlayerColor,
   validMoves,
   onTokenClick,
   animatingToken,
@@ -301,12 +303,20 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
 
         {/* 8. Render All Tokens (with stack offsets) */}
         {Array.from(coordTokenMap.values()).map((items) => {
-          return items.map(({ token, player }, idx) => {
-            const offset = getStackOffset(idx, items.length);
+          const renderedItems = items
+            .map((item, idx) => ({
+              ...item,
+              offset: getStackOffset(idx, items.length),
+              isValidMove:
+                item.token.color === currentPlayerColor &&
+                validMoves.some((m) => m.tokenId === item.token.id),
+            }))
+            // Draw valid movable tokens last so they appear on top of stacked opponent tokens
+            .sort((a, b) => Number(a.isValidMove) - Number(b.isValidMove));
+
+          return renderedItems.map(({ token, offset, isValidMove }) => {
             const posX = token.col * CELL_SIZE + CELL_SIZE / 2 + offset.dx;
             const posY = token.row * CELL_SIZE + CELL_SIZE / 2 + offset.dy;
-
-            const isValidMove = validMoves.some((m) => m.tokenId === token.id && player.color === token.color);
 
             return (
               <TokenPiece
@@ -317,7 +327,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                 y={posY}
                 radius={items.length > 1 ? 14 : 17}
                 isValidMove={isValidMove}
-                onClick={() => onTokenClick(token.id)}
+                onClick={() => onTokenClick(token.id, token.color)}
               />
             );
           });

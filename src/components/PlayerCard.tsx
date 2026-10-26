@@ -74,8 +74,24 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
             />
             <span>{theme.namePt}</span>
             <span>•</span>
-            <span className={player.type === 'ai' ? 'text-cyan-400 font-semibold' : 'text-emerald-400 font-semibold'}>
-              {player.type === 'ai' ? 'IA Inteligente' : 'Humano'}
+            <span
+              className={
+                player.type === 'ai'
+                  ? player.difficulty === 'smart'
+                    ? 'text-amber-400 font-semibold'
+                    : player.difficulty === 'normal'
+                      ? 'text-cyan-400 font-semibold'
+                      : 'text-slate-300 font-semibold'
+                  : 'text-emerald-400 font-semibold'
+              }
+            >
+              {player.type === 'ai'
+                ? player.difficulty === 'easy'
+                  ? 'IA Fácil'
+                  : player.difficulty === 'normal'
+                    ? 'IA Normal'
+                    : 'IA Mestre'
+                : 'Humano'}
             </span>
           </div>
         </div>

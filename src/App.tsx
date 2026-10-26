@@ -7,6 +7,7 @@ import {
   FastForward,
   Sparkles,
   ArrowLeft,
+  Zap,
 } from 'lucide-react';
 import type {
   GameLogEntry,
@@ -19,6 +20,7 @@ import {
   checkCapture,
   createInitialPlayers,
   getAnimationPath,
+  getNoBrainerMove,
   getValidMoves,
 } from './engine/ludoEngine';
 import { selectBestAIMove } from './engine/aiStrategy';
@@ -47,6 +49,8 @@ export function App() {
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(soundFX.isMuted);
   const [speed, setSpeed] = useState<number>(1); // 1x, 1.5x, 2x
+  const [autoMode, setAutoMode] = useState<boolean>(false);
+  const [autoRollDice, setAutoRollDice] = useState<boolean>(false);
 
   // Token being animated along the board
   const [animatingToken, setAnimatingToken] = useState<{
@@ -55,8 +59,11 @@ export function App() {
     coord: { row: number; col: number };
   } | null>(null);
 
-  const isAIActing = useRef<boolean>(false);
   const animationInProgress = useRef<boolean>(false);
+  const speedRef = useRef<number>(speed);
+  useEffect(() => {
+    speedRef.current = speed;
+  }, [speed]);
 
   const addLog = useCallback((
     color: PlayerColor,
@@ -86,7 +93,19 @@ export function App() {
     setSpeed((s) => (s === 1 ? 1.5 : s === 1.5 ? 2 : 1));
   };
 
+  const toggleAutoMode = () => {
+    setAutoMode((prev) => {
+      const next = !prev;
+      if (!next) {
+        setAutoRollDice(false);
+      }
+      return next;
+    });
+  };
+
   const handleStartGame = (configs: PlayerConfig[]) => {
+    animationInProgress.current = false;
+    setAnimatingToken(null);
     const initPlayers = createInitialPlayers(configs);
     setPlayers(initPlayers);
     setCurrentPlayerIdx(0);
@@ -131,20 +150,20 @@ export function App() {
     setValidMoves([]);
     setConsecutiveSixes(0);
     setCanRoll(true);
-    isAIActing.current = false;
   }, []);
 
   // Execute a selected move with step-by-step animation
-  const executeMove = useCallback((move: MoveOption) => {
+  const executeMove = useCallback((move: MoveOption, rolledDiceValue?: number | null) => {
     if (animationInProgress.current) return;
     animationInProgress.current = true;
     setValidMoves([]);
 
+    const activeDice = rolledDiceValue !== undefined ? rolledDiceValue : diceValue;
     const player = players[currentPlayerIdx];
     const path = getAnimationPath(player.color, move.tokenId, move.fromStep, move.toStep);
 
     let stepIndex = 0;
-    const stepDuration = Math.max(50, 110 / speed);
+    const stepDuration = Math.max(50, 110 / speedRef.current);
 
     const stepInterval = setInterval(() => {
       stepIndex++;
@@ -247,7 +266,7 @@ export function App() {
         }
 
         // Extra turn for rolling a 6
-        if (diceValue === 6 && !tokenFinished && !captureOccurred) {
+        if (activeDice === 6 && !tokenFinished && !captureOccurred) {
           extraTurn = true;
           addLog(
             player.color,
@@ -295,7 +314,7 @@ export function App() {
           // Trigger victory modal celebration
           setTimeout(() => {
             setPhase('gameover');
-          }, 1100 / speed);
+          }, 1100 / speedRef.current);
           return;
         }
 
@@ -306,14 +325,13 @@ export function App() {
           if (extraTurn && consecutiveSixes < 3) {
             setCanRoll(true);
             setDiceValue(null);
-            isAIActing.current = false;
           } else {
             advanceToNextPlayer(updated, currentPlayerIdx);
           }
-        }, 400 / speed);
+        }, 400 / speedRef.current);
       }
     }, stepDuration);
-  }, [currentPlayerIdx, players, speed, diceValue, consecutiveSixes, addLog, advanceToNextPlayer]);
+  }, [currentPlayerIdx, players, diceValue, consecutiveSixes, addLog, advanceToNextPlayer]);
 
   // Roll Dice Action
   const handleRollDice = useCallback(() => {
@@ -346,7 +364,7 @@ export function App() {
         );
         setTimeout(() => {
           advanceToNextPlayer(players, currentPlayerIdx);
-        }, 1000 / speed);
+        }, 1000 / speedRef.current);
         return;
       }
 
@@ -362,52 +380,81 @@ export function App() {
         );
         setTimeout(() => {
           advanceToNextPlayer(players, currentPlayerIdx);
-        }, 900 / speed);
+        }, 900 / speedRef.current);
       } else {
         setValidMoves(moves);
-
-        // If AI, trigger AI decision automatically after a brief human-friendly thinking pause
-        if (player.type === 'ai') {
-          setTimeout(() => {
-            const bestMove = selectBestAIMove(moves, player, players);
-            if (bestMove) {
-              executeMove(bestMove);
-            }
-          }, 650 / speed);
-        }
       }
     }, 450);
-  }, [canRoll, isRolling, players, currentPlayerIdx, consecutiveSixes, speed, addLog, advanceToNextPlayer, executeMove]);
+  }, [canRoll, isRolling, players, currentPlayerIdx, consecutiveSixes, addLog, advanceToNextPlayer]);
 
   // Handle Token Click from Human Player
-  const handleTokenClick = (tokenId: number) => {
+  const handleTokenClick = (tokenId: number, tokenColor: PlayerColor) => {
     if (!currentPlayer || currentPlayer.type === 'ai') return;
+    if (tokenColor !== currentPlayer.color) return;
     const move = validMoves.find((m) => m.tokenId === tokenId);
     if (move) {
-      executeMove(move);
+      executeMove(move, diceValue);
     }
   };
 
-  // AI Turn Auto-Trigger
+  // Auto Turn / Roll Trigger (AI or Human with Auto-Roll enabled)
   useEffect(() => {
     if (phase !== 'playing') return;
     if (!currentPlayer) return;
 
+    const shouldAutoRoll =
+      currentPlayer.type === 'ai' ||
+      (currentPlayer.type === 'human' && autoMode && autoRollDice);
+
     if (
-      currentPlayer.type === 'ai' &&
+      shouldAutoRoll &&
       canRoll &&
       !isRolling &&
-      !animationInProgress.current &&
-      !isAIActing.current
+      !animationInProgress.current
     ) {
-      isAIActing.current = true;
+      const delay = (currentPlayer.type === 'human' ? 550 : 700) / speed;
       const timer = setTimeout(() => {
         handleRollDice();
-      }, 700 / speed);
+      }, delay);
 
       return () => clearTimeout(timer);
     }
-  }, [phase, currentPlayer, canRoll, isRolling, speed, handleRollDice]);
+  }, [phase, currentPlayer, canRoll, isRolling, speed, autoMode, autoRollDice, handleRollDice]);
+
+  // Auto Move Selection (AI or Human with Auto Mode enabled)
+  useEffect(() => {
+    if (phase !== 'playing') return;
+    if (!currentPlayer) return;
+    if (validMoves.length === 0 || isRolling || canRoll || animationInProgress.current) return;
+
+    if (currentPlayer.type === 'ai') {
+      const timer = setTimeout(() => {
+        const bestMove = selectBestAIMove(validMoves, currentPlayer, players);
+        if (bestMove) {
+          executeMove(bestMove, diceValue);
+        }
+      }, 650 / speed);
+
+      return () => clearTimeout(timer);
+    }
+
+    if (currentPlayer.type === 'human' && autoMode) {
+      const noBrainer = getNoBrainerMove(validMoves);
+      if (noBrainer) {
+        const timer = setTimeout(() => {
+          addLog(
+            currentPlayer.color,
+            currentPlayer.name,
+            `⚡ Modo Auto: jogada executada automaticamente (peão #${noBrainer.tokenId + 1}).`,
+            'move'
+          );
+          executeMove(noBrainer, diceValue);
+        }, 550 / speed);
+
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [phase, currentPlayer, validMoves, isRolling, canRoll, speed, autoMode, players, diceValue, addLog, executeMove]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-white">
@@ -437,6 +484,49 @@ export function App() {
         <div className="flex items-center gap-2">
           {phase === 'playing' && (
             <>
+              {/* Auto Mode & Auto Roll Dice Controls */}
+              <div className="flex items-center gap-1 bg-slate-800/90 border border-slate-700 rounded-xl p-1">
+                <button
+                  type="button"
+                  onClick={toggleAutoMode}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    autoMode
+                      ? 'bg-amber-400 text-slate-950 shadow-sm shadow-amber-400/30'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+                  }`}
+                  title={
+                    autoMode
+                      ? 'Modo Automático ATIVADO: executa apenas jogadas obrigatórias sem decisão'
+                      : 'Ativar Modo Automático (ações óbvias/sem decisão são executadas sozinhas)'
+                  }
+                >
+                  <Zap className={`w-3.5 h-3.5 ${autoMode ? 'fill-slate-950' : 'text-amber-400'}`} />
+                  <span>Modo Auto</span>
+                </button>
+
+                <label
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors select-none ${
+                    autoMode
+                      ? 'text-slate-300 hover:text-white cursor-pointer'
+                      : 'opacity-40 text-slate-500 cursor-not-allowed'
+                  }`}
+                  title={
+                    autoMode
+                      ? 'Gira o dado automaticamente no seu turno'
+                      : 'Disponível apenas quando o Modo Automático estiver ativo'
+                  }
+                >
+                  <input
+                    type="checkbox"
+                    disabled={!autoMode}
+                    checked={autoRollDice}
+                    onChange={(e) => setAutoRollDice(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0 transition cursor-pointer disabled:cursor-not-allowed accent-amber-400"
+                  />
+                  <span className="text-[11px] font-semibold hidden md:inline">Auto Dado</span>
+                </label>
+              </div>
+
               {/* Animation Speed Toggle */}
               <button
                 onClick={toggleSpeed}
@@ -513,6 +603,7 @@ export function App() {
             <div className="lg:col-span-6 flex flex-col items-center gap-5 order-1 lg:order-2">
               <LudoBoard
                 players={players}
+                currentPlayerColor={currentPlayer?.color}
                 validMoves={validMoves}
                 onTokenClick={handleTokenClick}
                 animatingToken={animatingToken}
@@ -539,7 +630,21 @@ export function App() {
                           className="w-2.5 h-2.5 rounded-full inline-block"
                           style={{ backgroundColor: COLOR_THEMES[currentPlayer.color].primary }}
                         />
+                        {currentPlayer.type === 'human' && autoMode && (
+                          <span
+                            className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30"
+                            title="Modo Automático ativo para este jogador"
+                          >
+                            <Zap className="w-2.5 h-2.5 fill-amber-300" />
+                            Auto
+                          </span>
+                        )}
                       </div>
+                      {currentPlayer.type === 'human' && autoMode && validMoves.length > 0 && getNoBrainerMove(validMoves) === null && (
+                        <div className="text-[11px] text-amber-300 font-medium flex items-center gap-1 mt-0.5 animate-pulse">
+                          <span>⚠️ Decisão necessária: escolha o peão</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 

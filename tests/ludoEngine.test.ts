@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   getTokenCoord,
   SAFE_SQUARE_INDICES,
-  START_INDICES,
 } from '../src/constants/boardPath';
-import { selectBestAIMove } from '../src/engine/aiStrategy';
+import {
+  assessSquareThreat,
+  evaluateMoveScore,
+  selectBestAIMove,
+} from '../src/engine/aiStrategy';
 import {
   checkCapture,
   createInitialPlayers,
+  getNoBrainerMove,
   getValidMoves,
 } from '../src/engine/ludoEngine';
 import { PlayerConfig } from '../src/types/ludo';
@@ -171,5 +175,198 @@ describe('AI Strategy & Heuristics', () => {
 
     expect(bestMove?.tokenId).toBe(0);
     expect(bestMove?.isHome).toBe(true);
+  });
+
+  it('ignores false threat when enemy behind would turn into its own Home Stretch (> 50)', () => {
+    const players = createInitialPlayers(configs);
+    // Red starts at 0. At step 49, Red is at global index 49.
+    // Red's gate into Home Stretch is step 50 (global 50).
+    // So if Red rolls 3, 4, 5, or 6 from step 49, Red enters its Home Stretch (steps 52..55), NOT global 0..3!
+    players[1].tokens[0].state = 'track';
+    players[1].tokens[0].stepCount = 49;
+
+    // Global square 1 is 4 steps ahead of global 49 along the perimeter ((1 - 49 + 52) % 52 = 4),
+    // but Red at step 49 + 4 = 53 is inside Red's Home Stretch!
+    const threatAtGlobal1 = assessSquareThreat(1, 'green', players, false);
+    expect(threatAtGlobal1.isThreatened).toBe(false);
+    expect(threatAtGlobal1.threatRollCount).toBe(0);
+  });
+
+  it('Smart AI prioritizes capturing a leader on match point over finishing an already-safe Home Stretch piece', () => {
+    const players = createInitialPlayers(configs);
+    players[0].difficulty = 'smart';
+
+    // Green token 0 is already safe in Home Stretch at step 54 (needs 2 to reach 56)
+    players[0].tokens[0].state = 'homeStretch';
+    players[0].tokens[0].stepCount = 54;
+
+    // Green token 1 is on outer track at step 5 (can land on step 7 -> global 20 with dice 2)
+    players[0].tokens[1].state = 'track';
+    players[0].tokens[1].stepCount = 5;
+
+    // Red opponent is on match point (3 tokens already home!) and its last token is at step 20 (global 20)
+    players[1].tokensHome = 3;
+    players[1].tokens[0].state = 'track';
+    players[1].tokens[0].stepCount = 20;
+
+    const validMoves = getValidMoves(players[0], 2, players);
+    const bestMove = selectBestAIMove(validMoves, players[0], players);
+
+    // Smart AI stops Red from winning by capturing Red's last token instead of casually moving its safe token 0
+    expect(bestMove?.tokenId).toBe(1);
+    expect(bestMove?.isCapture).toBe(true);
+  });
+
+  it('Smart AI prefers advancing an outer-track token over shuffling an already-safe token inside Home Stretch', () => {
+    const players = createInitialPlayers(configs);
+    players[0].difficulty = 'smart';
+
+    // Token 0 is inside Home Stretch at step 51; rolling 2 moves it to 53 (does not finish)
+    players[0].tokens[0].state = 'homeStretch';
+    players[0].tokens[0].stepCount = 51;
+
+    // Token 1 is on outer track at step 25; rolling 2 moves it to 27 (safe from enemies)
+    players[0].tokens[1].state = 'track';
+    players[0].tokens[1].stepCount = 25;
+
+    const validMoves = getValidMoves(players[0], 2, players);
+    const bestMove = selectBestAIMove(validMoves, players[0], players);
+
+    expect(bestMove?.tokenId).toBe(1);
+  });
+
+  it('evaluates differently across easy, normal, and smart difficulty levels', () => {
+    const players = createInitialPlayers(configs);
+    // Green token 0 is on a safe star (step 8 -> global 21)
+    players[0].tokens[0].state = 'track';
+    players[0].tokens[0].stepCount = 8;
+
+    const validMoves = getValidMoves(players[0], 3, players);
+    const move = validMoves[0];
+
+    const normalScore = evaluateMoveScore(move, players[0], players, 'normal');
+    const smartScore = evaluateMoveScore(move, players[0], players, 'smart');
+
+    // Smart AI applies a safe-square camping penalty for leaving a star square for a non-capturing unsafe square
+    expect(smartScore).toBeLessThan(normalScore);
+  });
+});
+
+describe('Auto Mode Decision Engine (getNoBrainerMove)', () => {
+  const configs: PlayerConfig[] = [
+    { id: '1', name: 'Human Red', color: 'red', type: 'human' },
+    { id: '2', name: 'Bot Green', color: 'green', type: 'ai' },
+  ];
+
+  it('returns null when validMoves is empty', () => {
+    expect(getNoBrainerMove([])).toBeNull();
+  });
+
+  it('returns the move when exactly one move is possible on the board', () => {
+    const players = createInitialPlayers(configs);
+    // 3 tokens in base, 1 token on track step 10
+    players[0].tokens[0].state = 'track';
+    players[0].tokens[0].stepCount = 10;
+
+    // Roll 3 (not 6, so tokens in base cannot move)
+    const validMoves = getValidMoves(players[0], 3, players);
+    expect(validMoves).toHaveLength(1);
+
+    const autoMove = getNoBrainerMove(validMoves);
+    expect(autoMove).toBeDefined();
+    expect(autoMove?.tokenId).toBe(0);
+    expect(autoMove?.fromStep).toBe(10);
+    expect(autoMove?.toStep).toBe(13);
+  });
+
+  it('returns a move to exit base when rolling 6 and NO other tokens are on the track', () => {
+    const players = createInitialPlayers(configs);
+    // All 4 tokens in base
+    const validMoves = getValidMoves(players[0], 6, players);
+    expect(validMoves).toHaveLength(4);
+    expect(validMoves.every((m) => m.fromStep === -1)).toBe(true);
+
+    const autoMove = getNoBrainerMove(validMoves);
+    expect(autoMove).not.toBeNull();
+    expect(autoMove?.fromStep).toBe(-1);
+    expect(autoMove?.toStep).toBe(0);
+  });
+
+  it('returns null when rolling 6 with tokens in base AND a token on track (decision required)', () => {
+    const players = createInitialPlayers(configs);
+    // Token 0 on track, tokens 1, 2, 3 in base
+    players[0].tokens[0].state = 'track';
+    players[0].tokens[0].stepCount = 5;
+
+    // Roll 6 allows: move token 0 forward OR exit token 1, 2, or 3
+    const validMoves = getValidMoves(players[0], 6, players);
+    expect(validMoves.length).toBeGreaterThan(1);
+
+    // Some moves are from track, some from base
+    const hasBase = validMoves.some((m) => m.fromStep === -1);
+    const hasTrack = validMoves.some((m) => m.fromStep >= 0);
+    expect(hasBase).toBe(true);
+    expect(hasTrack).toBe(true);
+
+    // Auto mode MUST NOT play because player has a strategic choice
+    const autoMove = getNoBrainerMove(validMoves);
+    expect(autoMove).toBeNull();
+  });
+
+  it('returns null when multiple tokens on track can move (decision required)', () => {
+    const players = createInitialPlayers(configs);
+    // Token 0 and Token 1 on track at different positions
+    players[0].tokens[0].state = 'track';
+    players[0].tokens[0].stepCount = 4;
+    players[0].tokens[1].state = 'track';
+    players[0].tokens[1].stepCount = 12;
+
+    const validMoves = getValidMoves(players[0], 3, players);
+    expect(validMoves).toHaveLength(2);
+
+    // Auto mode MUST NOT play because player must choose which piece to advance
+    const autoMove = getNoBrainerMove(validMoves);
+    expect(autoMove).toBeNull();
+  });
+
+  it('returns the move when only one token can move because other token on track is blocked by overshoot', () => {
+    const players = createInitialPlayers(configs);
+    // Token 0 near goal (step 55, needs exactly 1 to reach 56)
+    players[0].tokens[0].state = 'homeStretch';
+    players[0].tokens[0].stepCount = 55;
+
+    // Token 1 on track
+    players[0].tokens[1].state = 'track';
+    players[0].tokens[1].stepCount = 10;
+
+    // Roll 3: Token 0 cannot move (55 + 3 = 58 > 56). Only Token 1 can move.
+    const validMoves = getValidMoves(players[0], 3, players);
+    expect(validMoves).toHaveLength(1);
+    expect(validMoves[0].tokenId).toBe(1);
+
+    const autoMove = getNoBrainerMove(validMoves);
+    expect(autoMove).not.toBeNull();
+    expect(autoMove?.tokenId).toBe(1);
+  });
+
+  it('returns a move automatically when multiple tokens are on the exact same square and no other moves exist', () => {
+    const players = createInitialPlayers(configs);
+    // Tokens 0 and 1 are both on track step 0 (start square)
+    players[0].tokens[0].state = 'track';
+    players[0].tokens[0].stepCount = 0;
+    players[0].tokens[1].state = 'track';
+    players[0].tokens[1].stepCount = 0;
+    // Tokens 2 and 3 are in base (-1)
+
+    // Roll 1: tokens 2 and 3 cannot move (needs 6). Tokens 0 and 1 both can move from 0 to 1.
+    const validMoves = getValidMoves(players[0], 1, players);
+    expect(validMoves).toHaveLength(2);
+    expect(validMoves.every((m) => m.fromStep === 0)).toBe(true);
+
+    // Auto mode SHOULD play because choosing between tokens on the same square is isomorphic
+    const autoMove = getNoBrainerMove(validMoves);
+    expect(autoMove).not.toBeNull();
+    expect(autoMove?.fromStep).toBe(0);
+    expect(autoMove?.toStep).toBe(1);
   });
 });

@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
-import { Bot, User, Play, Users, Sparkles, BookOpen, Volume2, VolumeX } from 'lucide-react';
+import { Bot, User, Play, Users, Sparkles, BookOpen, Volume2, VolumeX, Brain } from 'lucide-react';
 import { COLOR_THEMES } from '../constants/colors';
-import type { PlayerConfig, PlayerType } from '../types/ludo';
+import type { AIDifficulty, PlayerConfig, PlayerType } from '../types/ludo';
 import { soundFX } from '../audio/soundEffects';
+
+const DIFFICULTY_OPTIONS: { value: AIDifficulty; label: string; desc: string }[] = [
+  { value: 'easy', label: 'Fácil', desc: 'Casual: foca em avançar sem calcular emboscadas' },
+  { value: 'normal', label: 'Normal', desc: 'Equilibrada: protege peças e aproveita capturas' },
+  { value: 'smart', label: 'Mestre', desc: 'Estrategista: calcula probabilidades, emboscadas e foca no líder' },
+];
 
 interface SetupScreenProps {
   onStartGame: (players: PlayerConfig[]) => void;
@@ -35,6 +41,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({
       copy[index] = {
         ...copy[index],
         type: newType,
+        difficulty: copy[index].difficulty || 'smart',
         name:
           newType === 'ai'
             ? `Bot ${COLOR_THEMES[copy[index].color].namePt}`
@@ -42,6 +49,18 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({
       };
       return copy;
     });
+  };
+
+  const handleDifficultyChange = (index: number, difficulty: AIDifficulty) => {
+    setConfigs((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], difficulty };
+      return copy;
+    });
+  };
+
+  const handleGlobalDifficultyChange = (difficulty: AIDifficulty) => {
+    setConfigs((prev) => prev.map((cfg) => ({ ...cfg, difficulty })));
   };
 
   const handleNameChange = (index: number, name: string) => {
@@ -213,17 +232,49 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({
 
         {/* Player configuration slots */}
         <div className="space-y-3 mb-8">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-            Personalizar Jogadores:
-          </label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+              Personalizar Jogadores:
+            </label>
+            {configs.slice(0, playerCount).some((c) => c.type === 'ai') && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <Brain className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="text-slate-400 font-semibold">Nível de todas as IAs:</span>
+                <div className="inline-flex rounded-lg bg-slate-900 p-0.5 border border-slate-700/80">
+                  {DIFFICULTY_OPTIONS.map((opt) => {
+                    const allSame = configs
+                      .slice(0, playerCount)
+                      .filter((c) => c.type === 'ai')
+                      .every((c) => (c.difficulty || 'smart') === opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => handleGlobalDifficultyChange(opt.value)}
+                        title={opt.desc}
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                          allSame
+                            ? 'bg-cyan-600 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
           {configs.slice(0, playerCount).map((cfg, idx) => {
             const theme = COLOR_THEMES[cfg.color];
             const isHuman = cfg.type === 'human';
+            const currentDiff = cfg.difficulty || 'smart';
 
             return (
               <div
                 key={cfg.color}
-                className="flex items-center gap-3 p-3 rounded-2xl bg-slate-800/60 border border-slate-700/80"
+                className="flex flex-wrap sm:flex-nowrap items-center gap-3 p-3 rounded-2xl bg-slate-800/60 border border-slate-700/80"
               >
                 {/* Color icon */}
                 <div
@@ -234,7 +285,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({
                 </div>
 
                 {/* Name input */}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-[140px]">
                   <input
                     type="text"
                     value={cfg.name}
@@ -244,6 +295,37 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({
                     placeholder={`Nome (${theme.namePt})`}
                   />
                 </div>
+
+                {/* AI Difficulty selector (only shown for AI players) */}
+                {!isHuman && (
+                  <div
+                    className="flex items-center bg-slate-900/90 border border-slate-700/80 rounded-xl p-1 gap-0.5"
+                    title="Selecione o nível de inteligência deste Bot"
+                  >
+                    {DIFFICULTY_OPTIONS.map((opt) => {
+                      const isActive = currentDiff === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => handleDifficultyChange(idx, opt.value)}
+                          title={opt.desc}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                            isActive
+                              ? opt.value === 'smart'
+                                ? 'bg-amber-500 text-slate-950 shadow-sm'
+                                : opt.value === 'normal'
+                                  ? 'bg-cyan-600 text-white shadow-sm'
+                                  : 'bg-slate-700 text-slate-200 shadow-sm'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Type toggle: Human vs AI */}
                 <button
@@ -264,7 +346,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({
                   ) : (
                     <>
                       <Bot className="w-3.5 h-3.5" />
-                      <span>Computador (IA)</span>
+                      <span>IA</span>
                     </>
                   )}
                 </button>

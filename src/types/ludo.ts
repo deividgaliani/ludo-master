@@ -2,7 +2,7 @@ export type PlayerColor = 'red' | 'green' | 'yellow' | 'blue';
 
 export type PlayerType = 'human' | 'ai';
 
-export type AIDifficulty = 'smart' | 'normal';
+export type AIDifficulty = 'easy' | 'normal' | 'smart';
 
 export interface PlayerConfig {
   id: string;

@@ -170,3 +170,32 @@ export function getAnimationPath(
 
   return path;
 }
+
+/**
+ * Checks if the available valid moves require no tactical decision-making:
+ * 1. Exactly 1 valid move available in total.
+ * 2. Or, all valid moves share the exact same origin square (fromStep)
+ *    (e.g., all tokens in base, or multiple tokens stacked on the same track/homestretch square).
+ *    Since tokens of the same player are interchangeable, choosing between them produces
+ *    the exact same game state and has zero tactical difference.
+ * Returns the MoveOption to execute, or null if player decision is required.
+ */
+export function getNoBrainerMove(validMoves: MoveOption[]): MoveOption | null {
+  if (validMoves.length === 0) return null;
+
+  // 1. Only one move exists in total
+  if (validMoves.length === 1) {
+    return validMoves[0];
+  }
+
+  // 2. Multiple moves, but all share the exact same starting position
+  // (e.g. all from base -1, or all sharing square X on track or home stretch)
+  const allSameOrigin = validMoves.every((m) => m.fromStep === validMoves[0].fromStep);
+  if (allSameOrigin) {
+    return validMoves[0];
+  }
+
+  // Tactical decision required (e.g. choose between moving a token on track vs exiting yard, or tokens on different squares)
+  return null;
+}
+
