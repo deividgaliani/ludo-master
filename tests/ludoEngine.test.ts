@@ -13,6 +13,7 @@ import {
   createInitialPlayers,
   getNoBrainerMove,
   getValidMoves,
+  resolvePlayerFinish,
 } from '../src/engine/ludoEngine';
 import { PlayerConfig } from '../src/types/ludo';
 
@@ -384,3 +385,79 @@ describe('Auto Mode Decision Engine (getNoBrainerMove)', () => {
     }
   });
 });
+
+describe('Match Continuation Until Human Finishes (resolvePlayerFinish)', () => {
+  const fourPlayerConfigs: PlayerConfig[] = [
+    { id: '1', name: 'Você', color: 'red', type: 'human' },
+    { id: '2', name: 'Bot Verde', color: 'green', type: 'ai' },
+    { id: '3', name: 'Bot Amarelo', color: 'yellow', type: 'ai' },
+    { id: '4', name: 'Bot Azul', color: 'blue', type: 'ai' },
+  ];
+
+  it('ends the match immediately when the human player finishes in 1st place', () => {
+    const players = createInitialPlayers(fourPlayerConfigs);
+    players[0].tokensHome = 4; // Human finishes 1st
+    players[1].tokensHome = 2;
+    players[2].tokensHome = 3;
+    players[3].tokensHome = 1;
+
+    const result = resolvePlayerFinish(players, 0);
+    expect(result.shouldEndGame).toBe(true);
+    expect(result.finishedRank).toBe(1);
+    expect(result.updatedPlayers[0].rank).toBe(1);
+    expect(result.updatedPlayers[2].rank).toBe(2); // 3 tokens home
+    expect(result.updatedPlayers[1].rank).toBe(3); // 2 tokens home
+    expect(result.updatedPlayers[3].rank).toBe(4); // 1 token home
+  });
+
+  it('continues the match when an AI finishes in 1st place while human and other AIs remain active', () => {
+    const players = createInitialPlayers(fourPlayerConfigs);
+    players[1].tokensHome = 4; // Bot Verde finishes 1st
+
+    const result = resolvePlayerFinish(players, 1);
+    expect(result.shouldEndGame).toBe(false);
+    expect(result.finishedRank).toBe(1);
+    expect(result.updatedPlayers[1].rank).toBe(1);
+    // Remaining players are not yet ranked so the match continues
+    expect(result.updatedPlayers[0].rank).toBeUndefined();
+    expect(result.updatedPlayers[2].rank).toBeUndefined();
+    expect(result.updatedPlayers[3].rank).toBeUndefined();
+  });
+
+  it('ends the match when the human player finishes in 2nd place after an AI won 1st', () => {
+    const players = createInitialPlayers(fourPlayerConfigs);
+    players[1].tokensHome = 4;
+    players[1].rank = 1; // Bot Verde already 1st
+
+    players[0].tokensHome = 4; // Human finishes 2nd
+    players[2].tokensHome = 1;
+    players[3].tokensHome = 3;
+
+    const result = resolvePlayerFinish(players, 0);
+    expect(result.shouldEndGame).toBe(true);
+    expect(result.finishedRank).toBe(2);
+    expect(result.updatedPlayers[1].rank).toBe(1);
+    expect(result.updatedPlayers[0].rank).toBe(2);
+    expect(result.updatedPlayers[3].rank).toBe(3);
+    expect(result.updatedPlayers[2].rank).toBe(4);
+  });
+
+  it('ends the match immediately placing the human in 4th when all 3 AIs finish first', () => {
+    const players = createInitialPlayers(fourPlayerConfigs);
+    players[1].tokensHome = 4;
+    players[1].rank = 1;
+    players[2].tokensHome = 4;
+    players[2].rank = 2;
+
+    // 3rd AI finishes, leaving only the human unfinished
+    players[3].tokensHome = 4;
+    players[0].tokensHome = 2;
+
+    const result = resolvePlayerFinish(players, 3);
+    expect(result.shouldEndGame).toBe(true);
+    expect(result.finishedRank).toBe(3);
+    expect(result.updatedPlayers[3].rank).toBe(3);
+    expect(result.updatedPlayers[0].rank).toBe(4);
+  });
+});
+

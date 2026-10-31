@@ -5,7 +5,6 @@ import {
   RotateCcw,
   BookOpen,
   FastForward,
-  Sparkles,
   ArrowLeft,
   Zap,
   Timer,
@@ -25,6 +24,7 @@ import {
   getAnimationPath,
   getValidMoves,
   resolveAutoMove,
+  resolvePlayerFinish,
 } from './engine/ludoEngine';
 import { selectBestAIMove } from './engine/aiStrategy';
 import { getTokenCoord, TOTAL_STEPS_TO_GOAL } from './constants/boardPath';
@@ -35,6 +35,7 @@ import { LudoBoard } from './components/LudoBoard';
 import { DiceRoller } from './components/DiceRoller';
 import { PlayerCard } from './components/PlayerCard';
 import { GameHistory } from './components/GameHistory';
+import { LiveStatsPanel } from './components/LiveStatsPanel';
 import { RulesModal } from './components/RulesModal';
 import { VictoryModal } from './components/VictoryModal';
 import { AutoModeDropdown } from './components/AutoModeDropdown';
@@ -335,44 +336,44 @@ export function App() {
 
         const isPlayerFinished = updated[currentPlayerIdx].tokensHome === 4;
 
-        // If this player completed all 4 tokens: GAME WON!
+        // If this player completed all 4 tokens
         if (isPlayerFinished) {
           extraTurn = false; // Never grant extra turn when all tokens are already finished!
 
-          const currentRank = updated.filter((p) => p.rank).length + 1;
-          updated[currentPlayerIdx].rank = currentRank;
+          const { updatedPlayers, finishedRank, shouldEndGame } = resolvePlayerFinish(
+            updated,
+            currentPlayerIdx
+          );
+
+          if (shouldEndGame) {
+            const winMessage =
+              finishedRank === 1
+                ? `🏆 ${player.name} completou todos os 4 peões e VENCEU A PARTIDA!`
+                : `🏆 ${player.name} completou todos os 4 peões em ${finishedRank}º lugar! Fim de partida!`;
+
+            addLog(player.color, player.name, winMessage, 'win');
+            setPlayers(updatedPlayers);
+
+            // Trigger victory modal celebration
+            setTimeout(() => {
+              setMatchDuration(Math.floor((Date.now() - matchStartTimeRef.current) / 1000));
+              setPhase('gameover');
+            }, 1100 / speedRef.current);
+            return;
+          }
+
+          // AI finished while human player is still competing — game continues!
           addLog(
             player.color,
             player.name,
-            `🏆 ${player.name} completou todos os 4 peões e VENCEU A PARTIDA!`,
+            `🏅 ${player.name} completou todos os 4 peões e garantiu o ${finishedRank}º lugar! A partida continua!`,
             'win'
           );
+          setPlayers(updatedPlayers);
 
-          // Rank all remaining players based on tokens home and progress
-          let nextRank = currentRank + 1;
-          const remaining = updated
-            .map((p, idx) => ({ p, idx }))
-            .filter(({ p }) => !p.rank)
-            .sort((a, b) => {
-              if (b.p.tokensHome !== a.p.tokensHome) {
-                return b.p.tokensHome - a.p.tokensHome;
-              }
-              const sumA = a.p.tokens.reduce((acc, t) => acc + Math.max(0, t.stepCount), 0);
-              const sumB = b.p.tokens.reduce((acc, t) => acc + Math.max(0, t.stepCount), 0);
-              return sumB - sumA;
-            });
-
-          remaining.forEach(({ idx }) => {
-            updated[idx].rank = nextRank++;
-          });
-
-          setPlayers(updated);
-
-          // Trigger victory modal celebration
           setTimeout(() => {
-            setMatchDuration(Math.floor((Date.now() - matchStartTimeRef.current) / 1000));
-            setPhase('gameover');
-          }, 1100 / speedRef.current);
+            advanceToNextPlayer(updatedPlayers, currentPlayerIdx);
+          }, 600 / speedRef.current);
           return;
         }
 
@@ -646,13 +647,13 @@ export function App() {
             onOpenRules={() => setIsRulesOpen(true)}
           />
         ) : (
-          <div className="w-full max-w-7xl mx-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Left Side: Player Cards (2 on top or left) */}
-            <div className="lg:col-span-3 space-y-3 order-2 lg:order-1">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1 px-1">
+          <div className="w-full max-w-[1680px] mx-auto px-3 py-3 sm:px-6 sm:py-4 grid grid-cols-1 lg:grid-cols-12 gap-5 xl:gap-6 items-stretch">
+            {/* Left Side: Player Cards */}
+            <div className="lg:col-span-3 flex flex-col order-2 lg:order-1">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">
                 Jogadores
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2.5 flex-1">
                 {players.map((p, idx) => (
                   <PlayerCard
                     key={p.id}
@@ -666,7 +667,7 @@ export function App() {
             </div>
 
             {/* Center: The Board & Interactive Dice Area */}
-            <div className="lg:col-span-6 flex flex-col items-center gap-5 order-1 lg:order-2">
+            <div className="lg:col-span-6 flex flex-col items-center justify-between gap-4 order-1 lg:order-2">
               <LudoBoard
                 players={players}
                 currentPlayerColor={currentPlayer?.color}
@@ -677,7 +678,7 @@ export function App() {
 
               {/* Bottom Floating Control Bar */}
               {currentPlayer && (
-                <div className="w-full max-w-[620px] bg-slate-900/90 border border-slate-800 rounded-3xl p-4 shadow-xl flex items-center justify-between gap-4 backdrop-blur-md">
+                <div className="w-full max-w-[740px] bg-slate-900/90 border border-slate-800 rounded-3xl p-4 shadow-xl flex items-center justify-between gap-4 backdrop-blur-md">
                   {/* Current Player Prompt */}
                   <div className="flex items-center gap-3">
                     <div
@@ -730,18 +731,10 @@ export function App() {
               )}
             </div>
 
-            {/* Right Side: Game History & Live Feed */}
-            <div className="lg:col-span-3 space-y-3 order-3">
+            {/* Right Side: Game History & Live Stats */}
+            <div className="lg:col-span-3 flex flex-col gap-4 order-3">
               <GameHistory logs={logs} />
-
-              {/* Quick Strategy Tip Card */}
-              <div className="bg-slate-900/60 rounded-2xl border border-slate-800/80 p-4 text-xs text-slate-400 leading-relaxed">
-                <div className="flex items-center gap-1.5 font-bold text-slate-200 mb-1.5">
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>Dica Tática</span>
-                </div>
-                As casas com <strong>Estrela</strong> e as de saída protegem seus peões de serem capturados. A IA prioriza eliminar adversários desprotegidos e avançar para o centro!
-              </div>
+              <LiveStatsPanel players={players} />
             </div>
           </div>
         )}

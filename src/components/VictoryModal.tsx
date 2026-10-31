@@ -77,6 +77,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
 
   const winner = sortedPlayers[0];
   const winnerTheme = COLOR_THEMES[winner.color];
+  const humanPlayer = sortedPlayers.find((p) => p.type === 'human');
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -116,7 +117,16 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
             Fim de Partida!
           </h2>
           <p className="text-slate-300 text-sm mb-3">
-            Vitória de <strong style={{ color: winnerTheme.primary }}>{winner.name}</strong>!
+            1º Lugar: <strong style={{ color: winnerTheme.primary }}>{winner.name}</strong>
+            {humanPlayer && humanPlayer.id !== winner.id && humanPlayer.rank && (
+              <span className="text-slate-400">
+                {' '}•{' '}
+                <strong style={{ color: COLOR_THEMES[humanPlayer.color].primary }}>
+                  {humanPlayer.name}
+                </strong>{' '}
+                ficou em <strong className="text-amber-400">{humanPlayer.rank}º lugar</strong>!
+              </span>
+            )}
           </p>
 
           {/* Quick Match Global Badges */}

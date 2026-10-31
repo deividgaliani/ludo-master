@@ -1,6 +1,7 @@
 import React from 'react';
-import { Bot, User, Trophy, Home, Swords, ShieldAlert, Footprints } from 'lucide-react';
+import { Bot, User, Trophy, Home, Swords, ShieldAlert, Footprints, Dices } from 'lucide-react';
 import { COLOR_THEMES } from '../constants/colors';
+import { TOTAL_STEPS_TO_GOAL } from '../constants/boardPath';
 import type { Player } from '../types/ludo';
 
 interface PlayerCardProps {
@@ -20,12 +21,19 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   const onTrackCount = player.tokens.filter((t) => t.state === 'track' || t.state === 'homeStretch').length;
   const inHomeCount = player.tokens.filter((t) => t.state === 'home').length;
 
+  const maxStepsPerToken = TOTAL_STEPS_TO_GOAL + 1;
+  const completedSteps = player.tokens.reduce(
+    (sum, t) => sum + (t.state === 'base' ? 0 : Math.min(maxStepsPerToken, t.stepCount + 1)),
+    0
+  );
+  const progressPct = Math.round((completedSteps / (4 * maxStepsPerToken)) * 100);
+
   return (
     <div
-      className={`relative p-3.5 rounded-2xl border transition-all duration-300 backdrop-blur-md ${
+      className={`relative p-3 rounded-2xl border transition-all duration-300 backdrop-blur-md flex flex-col justify-between ${
         isCurrentTurn
-          ? 'bg-slate-800/95 shadow-xl scale-[1.02]'
-          : 'bg-slate-900/60 opacity-80 hover:opacity-100'
+          ? 'bg-slate-800/95 shadow-xl scale-[1.01]'
+          : 'bg-slate-900/60 opacity-85 hover:opacity-100'
       }`}
       style={{
         borderColor: isCurrentTurn ? theme.primary : 'rgba(51, 65, 85, 0.6)',
@@ -43,9 +51,9 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
       )}
 
       {/* Header: Avatar, Name & Type */}
-      <div className="flex items-center gap-2.5 mb-2.5">
+      <div className="flex items-center gap-2.5 mb-2">
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md font-bold"
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md font-bold shrink-0"
           style={{ backgroundColor: theme.primary }}
         >
           {player.type === 'ai' ? (
@@ -116,8 +124,25 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         </div>
       </div>
 
+      {/* Overall Race Progress Bar */}
+      <div className="mt-2">
+        <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1 px-0.5">
+          <span>Progresso na partida</span>
+          <span className="font-bold text-slate-200">{progressPct}%</span>
+        </div>
+        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/40">
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{
+              width: `${progressPct}%`,
+              backgroundColor: theme.primary,
+            }}
+          />
+        </div>
+      </div>
+
       {/* Live Match Metrics */}
-      <div className="mt-2.5 pt-2 border-t border-slate-700/40 grid grid-cols-3 gap-1.5 text-center text-[11px]">
+      <div className="mt-2 pt-1.5 border-t border-slate-700/40 grid grid-cols-4 gap-1 text-center text-[11px]">
         <div
           className="flex items-center justify-center gap-1 bg-rose-950/40 text-rose-300 rounded-lg py-1 px-1 border border-rose-900/40 font-semibold"
           title="Peças capturadas por este jogador"
@@ -134,10 +159,17 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         </div>
         <div
           className="flex items-center justify-center gap-1 bg-cyan-950/40 text-cyan-300 rounded-lg py-1 px-1 border border-cyan-900/40 font-semibold"
-          title="Total de movimentos realizados"
+          title={`Movimentos realizados (${player.stats?.distanceTraveled ?? 0} casas percorridas)`}
         >
           <Footprints className="w-3 h-3 text-cyan-400 shrink-0" />
           <span className="truncate">{player.stats?.totalMoves ?? 0}</span>
+        </div>
+        <div
+          className="flex items-center justify-center gap-1 bg-emerald-950/40 text-emerald-300 rounded-lg py-1 px-1 border border-emerald-900/40 font-semibold"
+          title={`Vezes que tirou 6 no dado (${player.stats?.sixesRolled ?? 0} de ${player.stats?.totalRolls ?? 0} rolagens)`}
+        >
+          <Dices className="w-3 h-3 text-emerald-400 shrink-0" />
+          <span className="truncate">{player.stats?.sixesRolled ?? 0}</span>
         </div>
       </div>
     </div>

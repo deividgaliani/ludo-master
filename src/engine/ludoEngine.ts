@@ -364,3 +364,63 @@ export function resolveAutoMove(
   return { move: null };
 }
 
+export interface PlayerFinishResolution {
+  updatedPlayers: Player[];
+  finishedRank: number;
+  shouldEndGame: boolean;
+}
+
+/**
+ * Assigns the finishing rank to a player who completed all 4 tokens and determines
+ * whether the match should conclude immediately or continue until a human player finishes
+ * (or only 1 unfinished player remains on the board).
+ */
+export function resolvePlayerFinish(
+  players: Player[],
+  finishingPlayerIndex: number
+): PlayerFinishResolution {
+  const updated = players.map((p) => ({ ...p }));
+  const finishingPlayer = updated[finishingPlayerIndex];
+
+  const currentRank = updated.filter((p) => p.rank !== undefined).length + 1;
+  finishingPlayer.rank = currentRank;
+
+  const unfinished = updated.filter((p) => p.tokensHome < 4 && p.rank === undefined);
+  const hasUnfinishedHuman = unfinished.some((p) => p.type === 'human');
+
+  // End the match if:
+  // 1. A human player just finished all 4 tokens
+  // 2. Only 1 (or 0) unfinished player remains (e.g. 3 AIs finished, leaving the human in 4th place)
+  // 3. No unfinished human players remain in the match
+  const shouldEndGame =
+    finishingPlayer.type === 'human' ||
+    unfinished.length <= 1 ||
+    !hasUnfinishedHuman;
+
+  if (shouldEndGame) {
+    let nextRank = currentRank + 1;
+    const remaining = updated
+      .map((p, idx) => ({ p, idx }))
+      .filter(({ p }) => p.rank === undefined)
+      .sort((a, b) => {
+        if (b.p.tokensHome !== a.p.tokensHome) {
+          return b.p.tokensHome - a.p.tokensHome;
+        }
+        const sumA = a.p.tokens.reduce((acc, t) => acc + Math.max(0, t.stepCount), 0);
+        const sumB = b.p.tokens.reduce((acc, t) => acc + Math.max(0, t.stepCount), 0);
+        return sumB - sumA;
+      });
+
+    remaining.forEach(({ idx }) => {
+      updated[idx].rank = nextRank++;
+    });
+  }
+
+  return {
+    updatedPlayers: updated,
+    finishedRank: currentRank,
+    shouldEndGame,
+  };
+}
+
+

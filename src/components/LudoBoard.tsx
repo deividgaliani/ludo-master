@@ -117,7 +117,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
   };
 
   return (
-    <div className="relative w-full max-w-[620px] aspect-square mx-auto rounded-3xl p-3 bg-slate-900/90 shadow-2xl border-4 border-slate-700/60 backdrop-blur-md">
+    <div className="relative w-full max-w-[740px] max-h-[calc(100vh-205px)] aspect-square mx-auto rounded-3xl p-3 bg-slate-900/90 shadow-2xl border-4 border-slate-700/60 backdrop-blur-md">
       <svg
         viewBox="0 0 750 750"
         className="w-full h-full rounded-2xl select-none"

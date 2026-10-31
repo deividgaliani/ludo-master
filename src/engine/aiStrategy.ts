@@ -242,8 +242,8 @@ function evaluateSmartMoveScore(
 
   const diceRolled = move.isEnterTrack ? 6 : move.toStep - move.fromStep;
 
-  // Identify the leading opponent for anti-leader targeting
-  const opponents = allPlayers.filter((p) => p.color !== player.color);
+  // Identify the leading active opponent for anti-leader targeting
+  const opponents = allPlayers.filter((p) => p.color !== player.color && p.tokensHome < 4);
   const maxOpponentProgress =
     opponents.length > 0
       ? Math.max(...opponents.map((opp) => getOpponentProgressScore(opp)))

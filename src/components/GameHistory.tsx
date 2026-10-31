@@ -32,7 +32,7 @@ export const GameHistory: React.FC<GameHistoryProps> = ({ logs }) => {
   };
 
   return (
-    <div className="bg-slate-900/80 rounded-2xl border border-slate-800 p-3.5 flex flex-col h-56 backdrop-blur-md">
+    <div className="bg-slate-900/80 rounded-2xl border border-slate-800 p-4 flex flex-col flex-1 min-h-[230px] max-h-[390px] backdrop-blur-md">
       <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-800 text-xs font-bold uppercase tracking-wider text-slate-400">
         <History className="w-4 h-4 text-cyan-400" />
         <span>Histórico de Lances</span>
