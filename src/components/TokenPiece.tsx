@@ -8,6 +8,7 @@ interface TokenPieceProps {
   x: number; // Center pixel coordinate
   y: number; // Center pixel coordinate
   radius?: number;
+  boardRotation?: number;
   isValidMove?: boolean;
   isAnimating?: boolean;
   onClick?: () => void;
@@ -19,6 +20,7 @@ export const TokenPiece: React.FC<TokenPieceProps> = ({
   x,
   y,
   radius = 18,
+  boardRotation = 0,
   isValidMove = false,
   isAnimating = false,
   onClick,
@@ -27,7 +29,7 @@ export const TokenPiece: React.FC<TokenPieceProps> = ({
 
   return (
     <g
-      transform={`translate(${x}, ${y})`}
+      transform={`translate(${x}, ${y}) rotate(${-boardRotation})`}
       onClick={isValidMove ? onClick : undefined}
       style={{
         cursor: isValidMove ? 'pointer' : 'default',

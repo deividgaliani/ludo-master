@@ -24,6 +24,13 @@ interface LudoBoardProps {
 
 const CELL_SIZE = 50; // 15 x 50 = 750px board
 
+const BOARD_ROTATION_BY_COLOR: Record<PlayerColor, number> = {
+  blue: 0,
+  yellow: 90,
+  green: 180,
+  red: 270,
+};
+
 export const LudoBoard: React.FC<LudoBoardProps> = ({
   players,
   currentPlayerColor,
@@ -31,6 +38,9 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
   onTokenClick,
   animatingToken,
 }) => {
+  // Orient the board so the first human player's base & home stretch face the bottom
+  const primaryHuman = players.find((p) => p.type === 'human');
+  const boardRotation = primaryHuman ? BOARD_ROTATION_BY_COLOR[primaryHuman.color] : 0;
   // Map all current active tokens to coordinate keys to calculate stacking offsets
   const coordTokenMap = new Map<string, { token: Token; player: Player }[]>();
 
@@ -64,7 +74,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
 
   const renderStarIcon = (cx: number, cy: number, color: string = '#f59e0b') => {
     return (
-      <g>
+      <g transform={boardRotation ? `rotate(${-boardRotation}, ${cx}, ${cy})` : undefined}>
         {/* Soft shadow under star */}
         <path
           d={`M ${cx} ${cy - 12} 
@@ -167,6 +177,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
         {/* Board Background */}
         <rect width="750" height="750" fill="#f8fafc" rx="16" />
 
+        <g transform={boardRotation ? `rotate(${boardRotation}, 375, 375)` : undefined}>
         {/* 1. Red Yard (Top Left) */}
         <rect x="0" y="0" width="300" height="300" fill="url(#red-base-grad)" rx="16" />
         <rect x="40" y="40" width="220" height="220" fill="#ffffff" rx="14" opacity="0.95" />
@@ -262,6 +273,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
           fontSize="13"
           fontWeight="900"
           fill="#0f172a"
+          transform={boardRotation ? `rotate(${-boardRotation}, 375, 375)` : undefined}
         >
           LUDO
         </text>
@@ -459,6 +471,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                 x={posX}
                 y={posY}
                 radius={items.length > 1 ? 14 : 17}
+                boardRotation={boardRotation}
                 isValidMove={isValidMove}
                 onClick={() => onTokenClick(token.id, token.color)}
               />
@@ -474,9 +487,11 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
             x={animatingToken.coord.col * CELL_SIZE + CELL_SIZE / 2}
             y={animatingToken.coord.row * CELL_SIZE + CELL_SIZE / 2}
             radius={18}
+            boardRotation={boardRotation}
             isAnimating={true}
           />
         )}
+        </g>
       </svg>
     </div>
   );
