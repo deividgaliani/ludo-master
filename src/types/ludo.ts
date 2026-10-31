@@ -31,6 +31,7 @@ export interface PlayerStats {
   totalMoves: number;
   totalRolls: number;
   sixesRolled: number;
+  diceRollsByFace: Record<number, number>;
   distanceTraveled: number;
   turnsPassedWithoutMove: number;
 }
@@ -55,6 +56,18 @@ export interface MoveOption {
   isCapture: boolean;
   isHome: boolean;
   score?: number; // Used by AI heuristic
+}
+
+export type AutoModePreset = 'basic' | 'fluid' | 'aggressive' | 'full' | 'custom';
+
+export interface AutoModeConfig {
+  enabled: boolean;
+  autoRollDice: boolean;
+  exitBaseOnSix: boolean;
+  prioritizeCapture: boolean;
+  prioritizeHome: boolean;
+  fullAutoAi: boolean;
+  preset: AutoModePreset;
 }
 
 export type GamePhase = 'setup' | 'playing' | 'gameover';

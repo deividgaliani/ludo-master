@@ -11,6 +11,7 @@ import {
   Timer,
 } from 'lucide-react';
 import type {
+  AutoModeConfig,
   GameLogEntry,
   MoveOption,
   Player,
@@ -20,9 +21,10 @@ import type {
 import {
   checkCapture,
   createInitialPlayers,
+  DEFAULT_AUTO_CONFIG,
   getAnimationPath,
-  getNoBrainerMove,
   getValidMoves,
+  resolveAutoMove,
 } from './engine/ludoEngine';
 import { selectBestAIMove } from './engine/aiStrategy';
 import { getTokenCoord, TOTAL_STEPS_TO_GOAL } from './constants/boardPath';
@@ -35,6 +37,22 @@ import { PlayerCard } from './components/PlayerCard';
 import { GameHistory } from './components/GameHistory';
 import { RulesModal } from './components/RulesModal';
 import { VictoryModal } from './components/VictoryModal';
+import { AutoModeDropdown } from './components/AutoModeDropdown';
+
+const STORAGE_KEY_AUTO_CONFIG = 'ludo_auto_mode_config';
+
+function loadInitialAutoConfig(): AutoModeConfig {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_AUTO_CONFIG);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...DEFAULT_AUTO_CONFIG, ...parsed };
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+  return DEFAULT_AUTO_CONFIG;
+}
 
 export function App() {
   const [phase, setPhase] = useState<'setup' | 'playing' | 'gameover'>('setup');
@@ -50,8 +68,16 @@ export function App() {
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(soundFX.isMuted);
   const [speed, setSpeed] = useState<number>(1); // 1x, 1.5x, 2x
-  const [autoMode, setAutoMode] = useState<boolean>(false);
-  const [autoRollDice, setAutoRollDice] = useState<boolean>(false);
+  const [autoConfig, setAutoConfig] = useState<AutoModeConfig>(loadInitialAutoConfig);
+
+  const handleAutoConfigChange = useCallback((newConfig: AutoModeConfig) => {
+    setAutoConfig(newConfig);
+    try {
+      localStorage.setItem(STORAGE_KEY_AUTO_CONFIG, JSON.stringify(newConfig));
+    } catch {
+      // Ignore
+    }
+  }, []);
   const [matchDuration, setMatchDuration] = useState<number>(0);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const matchStartTimeRef = useRef<number>(0);
@@ -109,15 +135,7 @@ export function App() {
     setSpeed((s) => (s === 1 ? 1.5 : s === 1.5 ? 2 : 1));
   };
 
-  const toggleAutoMode = () => {
-    setAutoMode((prev) => {
-      const next = !prev;
-      if (!next) {
-        setAutoRollDice(false);
-      }
-      return next;
-    });
-  };
+
 
   const handleStartGame = (configs: PlayerConfig[]) => {
     animationInProgress.current = false;
@@ -396,12 +414,17 @@ export function App() {
       setPlayers((prev) =>
         prev.map((p, idx) => {
           if (idx !== currentPlayerIdx) return p;
+          const prevByFace = p.stats?.diceRollsByFace ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
           return {
             ...p,
             stats: {
               ...p.stats,
               totalRolls: (p.stats?.totalRolls ?? 0) + 1,
               sixesRolled: rolled === 6 ? (p.stats?.sixesRolled ?? 0) + 1 : (p.stats?.sixesRolled ?? 0),
+              diceRollsByFace: {
+                ...prevByFace,
+                [rolled]: (prevByFace[rolled] ?? 0) + 1,
+              },
             },
           };
         })
@@ -472,7 +495,7 @@ export function App() {
 
     const shouldAutoRoll =
       currentPlayer.type === 'ai' ||
-      (currentPlayer.type === 'human' && autoMode && autoRollDice);
+      (currentPlayer.type === 'human' && autoConfig.enabled && autoConfig.autoRollDice);
 
     if (
       shouldAutoRoll &&
@@ -487,7 +510,7 @@ export function App() {
 
       return () => clearTimeout(timer);
     }
-  }, [phase, currentPlayer, canRoll, isRolling, speed, autoMode, autoRollDice, handleRollDice]);
+  }, [phase, currentPlayer, canRoll, isRolling, speed, autoConfig.enabled, autoConfig.autoRollDice, handleRollDice]);
 
   // Auto Move Selection (AI or Human with Auto Mode enabled)
   useEffect(() => {
@@ -506,23 +529,24 @@ export function App() {
       return () => clearTimeout(timer);
     }
 
-    if (currentPlayer.type === 'human' && autoMode) {
-      const noBrainer = getNoBrainerMove(validMoves);
-      if (noBrainer) {
+    if (currentPlayer.type === 'human' && autoConfig.enabled) {
+      const autoResult = resolveAutoMove(validMoves, diceValue, autoConfig, currentPlayer, players);
+      if (autoResult.move) {
         const timer = setTimeout(() => {
+          const detail = autoResult.description ? ` (${autoResult.description})` : '';
           addLog(
             currentPlayer.color,
             currentPlayer.name,
-            `⚡ Modo Auto: jogada executada automaticamente (peão #${noBrainer.tokenId + 1}).`,
+            `⚡ Modo Auto: peão #${autoResult.move!.tokenId + 1} movido${detail}.`,
             'move'
           );
-          executeMove(noBrainer, diceValue);
+          executeMove(autoResult.move!, diceValue);
         }, 550 / speed);
 
         return () => clearTimeout(timer);
       }
     }
-  }, [phase, currentPlayer, validMoves, isRolling, canRoll, speed, autoMode, players, diceValue, addLog, executeMove]);
+  }, [phase, currentPlayer, validMoves, isRolling, canRoll, speed, autoConfig, players, diceValue, addLog, executeMove]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-white">
@@ -552,48 +576,8 @@ export function App() {
         <div className="flex items-center gap-2">
           {phase === 'playing' && (
             <>
-              {/* Auto Mode & Auto Roll Dice Controls */}
-              <div className="flex items-center gap-1 bg-slate-800/90 border border-slate-700 rounded-xl p-1">
-                <button
-                  type="button"
-                  onClick={toggleAutoMode}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    autoMode
-                      ? 'bg-amber-400 text-slate-950 shadow-sm shadow-amber-400/30'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                  }`}
-                  title={
-                    autoMode
-                      ? 'Modo Automático ATIVADO: executa apenas jogadas obrigatórias sem decisão'
-                      : 'Ativar Modo Automático (ações óbvias/sem decisão são executadas sozinhas)'
-                  }
-                >
-                  <Zap className={`w-3.5 h-3.5 ${autoMode ? 'fill-slate-950' : 'text-amber-400'}`} />
-                  <span>Modo Auto</span>
-                </button>
-
-                <label
-                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors select-none ${
-                    autoMode
-                      ? 'text-slate-300 hover:text-white cursor-pointer'
-                      : 'opacity-40 text-slate-500 cursor-not-allowed'
-                  }`}
-                  title={
-                    autoMode
-                      ? 'Gira o dado automaticamente no seu turno'
-                      : 'Disponível apenas quando o Modo Automático estiver ativo'
-                  }
-                >
-                  <input
-                    type="checkbox"
-                    disabled={!autoMode}
-                    checked={autoRollDice}
-                    onChange={(e) => setAutoRollDice(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0 transition cursor-pointer disabled:cursor-not-allowed accent-amber-400"
-                  />
-                  <span className="text-[11px] font-semibold hidden md:inline">Auto Dado</span>
-                </label>
-              </div>
+              {/* Auto Mode Dropdown / Popover Controls */}
+              <AutoModeDropdown config={autoConfig} onChange={handleAutoConfigChange} />
 
               {/* Live Match Timer */}
               <div
@@ -712,20 +696,23 @@ export function App() {
                           className="w-2.5 h-2.5 rounded-full inline-block"
                           style={{ backgroundColor: COLOR_THEMES[currentPlayer.color].primary }}
                         />
-                        {currentPlayer.type === 'human' && autoMode && (
+                        {currentPlayer.type === 'human' && autoConfig.enabled && (
                           <span
                             className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30"
-                            title="Modo Automático ativo para este jogador"
+                            title={`Modo Auto ativo: perfil ${autoConfig.preset}`}
                           >
                             <Zap className="w-2.5 h-2.5 fill-amber-300" />
                             Auto
                           </span>
                         )}
                       </div>
-                      {currentPlayer.type === 'human' && autoMode && validMoves.length > 0 && getNoBrainerMove(validMoves) === null && (
-                        <div className="text-[11px] text-amber-300 font-medium flex items-center gap-1 mt-0.5 animate-pulse">
-                          <span>⚠️ Decisão necessária: escolha o peão</span>
-                        </div>
+                      {currentPlayer.type === 'human' &&
+                        autoConfig.enabled &&
+                        validMoves.length > 0 &&
+                        resolveAutoMove(validMoves, diceValue, autoConfig, currentPlayer, players).move === null && (
+                          <div className="text-[11px] text-amber-300 font-medium flex items-center gap-1 mt-0.5 animate-pulse">
+                            <span>⚠️ Decisão necessária: escolha o peão</span>
+                          </div>
                       )}
                     </div>
                   </div>

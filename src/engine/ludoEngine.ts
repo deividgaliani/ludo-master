@@ -6,6 +6,8 @@ import {
   TOTAL_STEPS_TO_GOAL,
 } from '../constants/boardPath';
 import type {
+  AutoModeConfig,
+  AutoModePreset,
   MoveOption,
   Player,
   PlayerColor,
@@ -13,6 +15,7 @@ import type {
   PlayerStats,
   Token,
 } from '../types/ludo';
+import { selectBestAIMove } from './aiStrategy';
 
 export function createInitialStats(): PlayerStats {
   return {
@@ -21,6 +24,7 @@ export function createInitialStats(): PlayerStats {
     totalMoves: 0,
     totalRolls: 0,
     sixesRolled: 0,
+    diceRollsByFace: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 },
     distanceTraveled: 0,
     turnsPassedWithoutMove: 0,
   };
@@ -211,5 +215,152 @@ export function getNoBrainerMove(validMoves: MoveOption[]): MoveOption | null {
 
   // Tactical decision required (e.g. choose between moving a token on track vs exiting yard, or tokens on different squares)
   return null;
+}
+
+export const DEFAULT_AUTO_CONFIG: AutoModeConfig = {
+  enabled: false,
+  autoRollDice: false,
+  exitBaseOnSix: false,
+  prioritizeCapture: false,
+  prioritizeHome: false,
+  fullAutoAi: false,
+  preset: 'basic',
+};
+
+export const AUTO_MODE_PRESETS: Record<AutoModePreset, Omit<AutoModeConfig, 'enabled'>> = {
+  basic: {
+    autoRollDice: false,
+    exitBaseOnSix: false,
+    prioritizeCapture: false,
+    prioritizeHome: false,
+    fullAutoAi: false,
+    preset: 'basic',
+  },
+  fluid: {
+    autoRollDice: true,
+    exitBaseOnSix: true,
+    prioritizeCapture: false,
+    prioritizeHome: true,
+    fullAutoAi: false,
+    preset: 'fluid',
+  },
+  aggressive: {
+    autoRollDice: true,
+    exitBaseOnSix: true,
+    prioritizeCapture: true,
+    prioritizeHome: true,
+    fullAutoAi: false,
+    preset: 'aggressive',
+  },
+  full: {
+    autoRollDice: true,
+    exitBaseOnSix: true,
+    prioritizeCapture: true,
+    prioritizeHome: true,
+    fullAutoAi: true,
+    preset: 'full',
+  },
+  custom: {
+    autoRollDice: false,
+    exitBaseOnSix: true,
+    prioritizeCapture: false,
+    prioritizeHome: false,
+    fullAutoAi: false,
+    preset: 'custom',
+  },
+};
+
+export interface AutoMoveResult {
+  move: MoveOption | null;
+  reason?: 'single' | 'same-origin' | 'home' | 'capture' | 'exit-base' | 'ai';
+  description?: string;
+}
+
+/**
+ * Resolves an automated move for a human player with Auto Mode enabled,
+ * applying configured heuristics and priority rules.
+ */
+export function resolveAutoMove(
+  validMoves: MoveOption[],
+  diceValue: number | null,
+  config: AutoModeConfig,
+  player: Player,
+  allPlayers: Player[]
+): AutoMoveResult {
+  if (validMoves.length === 0 || !config.enabled) {
+    return { move: null };
+  }
+
+  // 1. Single valid move
+  if (validMoves.length === 1) {
+    return {
+      move: validMoves[0],
+      reason: 'single',
+      description: 'Única jogada disponível',
+    };
+  }
+
+  // 2. All moves originate from the exact same position (e.g. all in base or stacked)
+  const allSameOrigin = validMoves.every((m) => m.fromStep === validMoves[0].fromStep);
+  if (allSameOrigin) {
+    return {
+      move: validMoves[0],
+      reason: 'same-origin',
+      description: 'Jogadas com origem equivalente',
+    };
+  }
+
+  // 3. Prioritize reaching the final goal (Home)
+  if (config.prioritizeHome) {
+    const homeMove = validMoves.find((m) => m.isHome);
+    if (homeMove) {
+      return {
+        move: homeMove,
+        reason: 'home',
+        description: 'Prioridade: finalização no centro',
+      };
+    }
+  }
+
+  // 4. Prioritize enemy captures
+  if (config.prioritizeCapture) {
+    const captureMoves = validMoves.filter((m) => m.isCapture);
+    if (captureMoves.length > 0) {
+      // Pick capture move that advances furthest
+      const bestCapture = captureMoves.reduce((best, cur) => (cur.toStep > best.toStep ? cur : best), captureMoves[0]);
+      return {
+        move: bestCapture,
+        reason: 'capture',
+        description: 'Prioridade: captura de peão adversário',
+      };
+    }
+  }
+
+  // 5. Prioritize exiting base on rolling 6
+  if (config.exitBaseOnSix && diceValue === 6) {
+    const exitMove = validMoves.find((m) => m.isEnterTrack || m.fromStep === -1);
+    if (exitMove) {
+      return {
+        move: exitMove,
+        reason: 'exit-base',
+        description: 'Prioridade: sair da base com 6',
+      };
+    }
+  }
+
+  // 6. Full AI autopilot fallback
+  if (config.fullAutoAi) {
+    const aiMove = selectBestAIMove(validMoves, player, allPlayers);
+    if (aiMove) {
+      return {
+        move: aiMove,
+        reason: 'ai',
+        description: 'Piloto IA: melhor decisão tática',
+      };
+    }
+  }
+
+  // Ambiguity remaining: requires manual human choice
+  return { move: null };
 }
 

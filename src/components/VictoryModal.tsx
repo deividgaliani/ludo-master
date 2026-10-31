@@ -24,6 +24,8 @@ interface VictoryModalProps {
   onReturnToMenu: () => void;
 }
 
+const DICE_FACES = [1, 2, 3, 4, 5, 6] as const;
+
 export const VictoryModal: React.FC<VictoryModalProps> = ({
   isOpen,
   players,
@@ -31,7 +33,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
   onPlayAgain,
   onReturnToMenu,
 }) => {
-  const [activeTab, setActiveTab] = useState<'podium' | 'details'>('podium');
+  const [activeTab, setActiveTab] = useState<'podium' | 'details' | 'dice'>('podium');
 
   useEffect(() => {
     if (isOpen) {
@@ -85,6 +87,15 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
   const totalMatchCaptures = players.reduce((acc, p) => acc + (p.stats?.piecesCaptured ?? 0), 0);
   const totalMatchMoves = players.reduce((acc, p) => acc + (p.stats?.totalMoves ?? 0), 0);
   const totalMatchRolls = players.reduce((acc, p) => acc + (p.stats?.totalRolls ?? 0), 0);
+
+  const globalDiceCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+  for (const face of DICE_FACES) {
+    globalDiceCounts[face] = players.reduce(
+      (acc, p) => acc + (p.stats?.diceRollsByFace?.[face] ?? 0),
+      0
+    );
+  }
+  const maxGlobalFaceCount = Math.max(1, ...Object.values(globalDiceCounts));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in overflow-y-auto">
@@ -184,28 +195,39 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
           </div>
 
           {/* Tab Selector */}
-          <div className="flex items-center justify-center p-1 bg-slate-800/80 rounded-xl mb-3 border border-slate-750">
+          <div className="flex items-center justify-center p-1 bg-slate-800/80 rounded-xl mb-3 border border-slate-750 gap-1">
             <button
               onClick={() => setActiveTab('podium')}
-              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'podium'
                   ? 'bg-amber-500 text-slate-950 shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Trophy className="w-3.5 h-3.5" />
-              <span>Classificação & Métricas</span>
+              <Trophy className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Classificação</span>
             </button>
             <button
               onClick={() => setActiveTab('details')}
-              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'details'
                   ? 'bg-amber-500 text-slate-950 shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <BarChart3 className="w-3.5 h-3.5" />
-              <span>Tabela Detalhada</span>
+              <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Tabela Geral</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('dice')}
+              className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === 'dice'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Dices className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Dados (1–6)</span>
             </button>
           </div>
         </div>
@@ -314,7 +336,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
                 </div>
               );
             })
-          ) : (
+          ) : activeTab === 'details' ? (
             <div className="bg-slate-950/60 rounded-2xl border border-slate-800 p-2.5 overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
@@ -361,6 +383,152 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
                   })}
                 </tbody>
               </table>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Global Summary Card (Sum of all players) */}
+              <div className="bg-slate-950/60 rounded-2xl border border-slate-800 p-3">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                    <Dices className="w-4 h-4 text-emerald-400" />
+                    <span>Estatística Geral (Soma de Todos)</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">
+                    Total: <strong className="text-white">{totalMatchRolls}</strong> rolagens
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-6 gap-1.5 text-center">
+                  {DICE_FACES.map((face) => {
+                    const count = globalDiceCounts[face];
+                    const pct = totalMatchRolls > 0 ? Math.round((count / totalMatchRolls) * 100) : 0;
+                    const barHeightPct = totalMatchRolls > 0 ? Math.round((count / maxGlobalFaceCount) * 100) : 0;
+                    const isSix = face === 6;
+
+                    return (
+                      <div
+                        key={face}
+                        className={`p-2 rounded-xl border flex flex-col items-center justify-between ${
+                          isSix
+                            ? 'bg-emerald-950/25 border-emerald-500/40'
+                            : 'bg-slate-900/90 border-slate-800'
+                        }`}
+                      >
+                        <span
+                          className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center mb-1 border ${
+                            isSix
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : 'bg-slate-800 text-slate-200 border-slate-700'
+                          }`}
+                        >
+                          {face}
+                        </span>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden my-1">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              isSix ? 'bg-emerald-400' : 'bg-amber-400'
+                            }`}
+                            style={{ width: `${barHeightPct}%` }}
+                          />
+                        </div>
+                        <span
+                          className={`text-sm font-extrabold ${
+                            isSix ? 'text-emerald-300' : 'text-white'
+                          }`}
+                        >
+                          {count}x
+                        </span>
+                        <span className="text-[10px] text-slate-400">{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Per-Player Breakdown Table */}
+              <div className="bg-slate-950/60 rounded-2xl border border-slate-800 p-2.5 overflow-x-auto">
+                <div className="text-[11px] font-bold text-slate-300 px-1.5 mb-1.5">
+                  Frequência por Jogador
+                </div>
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-wider">
+                      <th className="py-2 px-2">Jogador</th>
+                      {DICE_FACES.map((face) => (
+                        <th
+                          key={face}
+                          className={`py-2 px-1 text-center ${
+                            face === 6 ? 'text-emerald-400 font-extrabold' : ''
+                          }`}
+                          title={`Vezes que saiu o número ${face}`}
+                        >
+                          [{face}]
+                        </th>
+                      ))}
+                      <th className="py-2 px-1.5 text-right" title="Total de dados rolados pelo jogador">
+                        Total
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850">
+                    {sortedPlayers.map((p, idx) => {
+                      const pTheme = COLOR_THEMES[p.color];
+                      const byFace = p.stats?.diceRollsByFace ?? {};
+                      return (
+                        <tr key={p.id} className="text-slate-200 hover:bg-slate-800/40">
+                          <td className="py-2.5 px-2 flex items-center gap-1.5 font-bold">
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: pTheme.primary }}
+                            />
+                            <span className="truncate max-w-[105px]">
+                              {idx + 1}º {p.name}
+                            </span>
+                          </td>
+                          {DICE_FACES.map((face) => {
+                            const count = byFace[face] ?? 0;
+                            return (
+                              <td
+                                key={face}
+                                className={`py-2.5 px-1 text-center font-semibold ${
+                                  face === 6
+                                    ? 'text-emerald-300 bg-emerald-950/15'
+                                    : count > 0
+                                    ? 'text-slate-200'
+                                    : 'text-slate-600'
+                                }`}
+                              >
+                                {count}
+                              </td>
+                            );
+                          })}
+                          <td className="py-2.5 px-1.5 text-right font-extrabold text-amber-300">
+                            {p.stats?.totalRolls ?? 0}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-800 bg-slate-900/70 text-xs font-extrabold text-white">
+                      <td className="py-2 px-2 text-amber-400">Soma Geral</td>
+                      {DICE_FACES.map((face) => (
+                        <td
+                          key={face}
+                          className={`py-2 px-1 text-center ${
+                            face === 6 ? 'text-emerald-300' : 'text-slate-200'
+                          }`}
+                        >
+                          {globalDiceCounts[face]}
+                        </td>
+                      ))}
+                      <td className="py-2 px-1.5 text-right text-amber-400">
+                        {totalMatchRolls}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           )}
         </div>

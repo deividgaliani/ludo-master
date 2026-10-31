@@ -378,6 +378,7 @@ describe('Auto Mode Decision Engine (getNoBrainerMove)', () => {
       expect(player.stats.totalMoves).toBe(0);
       expect(player.stats.totalRolls).toBe(0);
       expect(player.stats.sixesRolled).toBe(0);
+      expect(player.stats.diceRollsByFace).toEqual({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 });
       expect(player.stats.distanceTraveled).toBe(0);
       expect(player.stats.turnsPassedWithoutMove).toBe(0);
     }
